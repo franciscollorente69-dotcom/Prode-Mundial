@@ -38,7 +38,9 @@ export default function AdminPage() {
       }
       setScores((prev) => ({ ...init, ...prev }))
     })
-    return unsub
+    // Firestore won't fire for an empty collection — unblock UI after 3s
+    const timeout = setTimeout(() => setLoading(false), 3000)
+    return () => { unsub(); clearTimeout(timeout) }
   }, [])
 
   const handleDelete = async () => {
@@ -109,7 +111,7 @@ export default function AdminPage() {
     [matches, activeStage]
   )
 
-  if (loading) return <LoadingSpinner />
+  // Don't block the whole page — seed/delete buttons must always be accessible
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
@@ -162,7 +164,8 @@ export default function AdminPage() {
 
       {/* Match list */}
       <div className="flex flex-col gap-3">
-        {filtered.map((match) => {
+        {loading && <LoadingSpinner />}
+        {!loading && filtered.map((match) => {
           const s = scores[match.id] || { home: '', away: '' }
           const isKnockout = match.stage !== 'group'
           const isPending = match.homeTeam === 'Por definir'
@@ -288,7 +291,7 @@ export default function AdminPage() {
           )
         })}
 
-        {filtered.length === 0 && (
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-12 text-gray-600 text-sm">
             No hay partidos en esta fase. Cargá los datos primero.
           </div>
