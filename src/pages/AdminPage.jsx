@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch } from '../firebase/firestore'
+import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, deleteAllMatches } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -34,17 +34,33 @@ export default function AdminPage() {
     return unsub
   }, [])
 
+  const [deleting, setDeleting] = useState(false)
+
   const handleSeed = async () => {
-    if (!window.confirm('¿Cargar los 48 partidos de la fase de grupos y los knockouts? Esto no se puede deshacer.')) return
+    if (!window.confirm('¿Cargar los 72 partidos de la fase de grupos (12 grupos × 6 partidos) + knockouts? Esto no se puede deshacer.')) return
     setSeeding(true)
     setSeedMsg('')
     try {
-      const count = await seedMatches()
-      setSeedMsg(`✅ ${count} partidos cargados correctamente.`)
+      const result = await seedMatches()
+      setSeedMsg(`✅ ${result.groupStage} partidos de grupos + ${result.knockout} knockouts = ${result.total} en total.`)
     } catch (e) {
       setSeedMsg(`❌ Error: ${e.message}`)
     } finally {
       setSeeding(false)
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm('⚠️ ¿ELIMINAR TODOS los partidos de Firestore? Esta acción es irreversible.')) return
+    setDeleting(true)
+    setSeedMsg('')
+    try {
+      const count = await deleteAllMatches()
+      setSeedMsg(`🗑️ ${count} partidos eliminados. Podés volver a cargar los datos.`)
+    } catch (e) {
+      setSeedMsg(`❌ Error al eliminar: ${e.message}`)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -95,21 +111,32 @@ export default function AdminPage() {
       <h1 className="text-xl font-black text-white mb-1">Panel de Administración</h1>
       <p className="text-xs text-gray-500 mb-5">Solo visible para admins</p>
 
-      {/* Seed button */}
+      {/* Seed / Reset buttons */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-6">
-        <h2 className="font-bold text-white text-sm mb-1">Cargar datos del Mundial</h2>
+        <h2 className="font-bold text-white text-sm mb-1">Datos del Mundial 2026</h2>
         <p className="text-xs text-gray-400 mb-3">
-          Carga los 48 partidos de la fase de grupos (16 grupos de 3 equipos) + partidos de eliminación directa como placeholders.
+          Carga los <strong className="text-white">72 partidos de la fase de grupos</strong> (12 grupos × 6 partidos, draw oficial de diciembre 2025)
+          más los partidos de eliminación directa como placeholders.
+          Si ya hay partidos cargados, primero eliminá y luego recargá.
         </p>
-        <button
-          onClick={handleSeed}
-          disabled={seeding}
-          className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
-        >
-          {seeding ? '⏳ Cargando...' : '🌍 Cargar partidos del Mundial 2026'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleSeed}
+            disabled={seeding || deleting}
+            className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            {seeding ? '⏳ Cargando...' : '🌍 Cargar partidos del Mundial 2026'}
+          </button>
+          <button
+            onClick={handleDeleteAll}
+            disabled={seeding || deleting || matches.length === 0}
+            className="bg-red-700 hover:bg-red-600 disabled:bg-red-950 disabled:text-red-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            {deleting ? '⏳ Eliminando...' : '🗑️ Eliminar todos los partidos'}
+          </button>
+        </div>
         {seedMsg && (
-          <p className={`mt-2 text-sm ${seedMsg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>
+          <p className={`mt-2 text-sm ${seedMsg.startsWith('✅') ? 'text-green-400' : seedMsg.startsWith('🗑️') ? 'text-yellow-400' : 'text-red-400'}`}>
             {seedMsg}
           </p>
         )}

@@ -144,3 +144,20 @@ export const subscribeLeaderboard = (callback) =>
 
 export const updateKnockoutMatch = async (matchId, data) =>
   updateDoc(doc(db, 'matches', matchId), data)
+
+// ─── Admin: delete all matches (for re-seeding) ───────────────────────────────
+
+export const deleteAllMatches = async () => {
+  const snap = await getDocs(collection(db, 'matches'))
+  const BATCH_SIZE = 490
+  let deleted = 0
+  for (let i = 0; i < snap.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    for (const d of snap.docs.slice(i, i + BATCH_SIZE)) {
+      batch.delete(doc(db, 'matches', d.id))
+      deleted++
+    }
+    await batch.commit()
+  }
+  return deleted
+}
