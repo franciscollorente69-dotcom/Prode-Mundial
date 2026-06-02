@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers, deleteAllMatches } from '../firebase/firestore'
+import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers, getPendingUsers, approveUser, deleteAllMatches } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -16,10 +16,18 @@ export default function AdminPage() {
   const [deleting, setDeleting] = useState(false)
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(true)
+  const [pendingUsers, setPendingUsers] = useState([])
+  const [approvingId, setApprovingId] = useState(null)
 
-  useEffect(() => {
-    getUsers().then((data) => { setUsers(data); setUsersLoading(false) }).catch(() => setUsersLoading(false))
-  }, [])
+  const reloadUsers = () => {
+    Promise.all([getUsers(), getPendingUsers()]).then(([all, pending]) => {
+      setUsers(all)
+      setPendingUsers(pending)
+      setUsersLoading(false)
+    }).catch(() => setUsersLoading(false))
+  }
+
+  useEffect(() => { reloadUsers() }, [])
 
   useEffect(() => {
     const unsub = subscribeMatches((data) => {
@@ -54,6 +62,16 @@ export default function AdminPage() {
       setSeedMsg(`❌ Error: ${e.message}`)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleApprove = async (uid) => {
+    setApprovingId(uid)
+    try {
+      await approveUser(uid)
+      reloadUsers()
+    } finally {
+      setApprovingId(null)
     }
   }
 
@@ -117,6 +135,37 @@ export default function AdminPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
       <h1 className="text-xl font-black text-white mb-1">Panel de Administración</h1>
       <p className="text-xs text-gray-500 mb-5">Solo visible para admins</p>
+
+      {/* Pending users */}
+      {!usersLoading && pendingUsers.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/40 rounded-2xl p-4 mb-6">
+          <h2 className="font-bold text-yellow-400 text-sm mb-3">
+            ⏳ Usuarios Pendientes ({pendingUsers.length})
+          </h2>
+          <div className="flex flex-col gap-2">
+            {pendingUsers.map((u) => (
+              <div key={u.id} className="flex items-center justify-between gap-3 bg-gray-900/60 rounded-xl px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">{u.displayName || '—'}</p>
+                  <p className="text-gray-400 text-xs truncate">@{u.username} · {u.email}</p>
+                  <p className="text-gray-600 text-xs">
+                    {u.createdAt?.toDate
+                      ? u.createdAt.toDate().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      : '—'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleApprove(u.id)}
+                  disabled={approvingId === u.id}
+                  className="flex-shrink-0 bg-green-600 hover:bg-green-500 disabled:bg-green-900 text-white font-semibold text-xs px-3 py-1.5 rounded-xl transition-colors"
+                >
+                  {approvingId === u.id ? '...' : '✅ Aprobar'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Seed button */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-6">
@@ -317,6 +366,7 @@ export default function AdminPage() {
                       <th className="px-3 py-2 font-semibold text-right">Pts</th>
                       <th className="px-3 py-2 font-semibold">Registro</th>
                       <th className="px-3 py-2 font-semibold">Admin</th>
+                      <th className="px-3 py-2 font-semibold">Aprobado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -335,6 +385,11 @@ export default function AdminPage() {
                           {u.isAdmin
                             ? <span className="text-yellow-400 font-bold">Sí</span>
                             : <span className="text-gray-600">No</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {u.isAdmin || u.approved
+                            ? <span title="Aprobado">✅</span>
+                            : <span title="Pendiente">⏳</span>}
                         </td>
                       </tr>
                     ))}

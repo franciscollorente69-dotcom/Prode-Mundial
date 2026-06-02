@@ -162,3 +162,13 @@ export const getUsers = async () => {
   const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
+
+export const getPendingUsers = async () => {
+  const snap = await getDocs(
+    query(collection(db, 'users'), where('approved', '==', false), orderBy('createdAt', 'desc'))
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export const approveUser = async (uid) =>
+  updateDoc(doc(db, 'users', uid), { approved: true })

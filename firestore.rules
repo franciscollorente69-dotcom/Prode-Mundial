@@ -25,8 +25,16 @@ service cloud.firestore {
       return val is int && val >= 0 && val <= 30;
     }
 
+    function isApproved() {
+      return isAuth() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
+      );
+    }
+
     // ─── users ───────────────────────────────────────────────────────────────
     match /users/{uid} {
+      // Any authenticated user can read profiles (needed for approval check on login)
       allow read: if isAuth();
 
       allow create: if isOwner(uid)
@@ -60,17 +68,18 @@ service cloud.firestore {
 
     // ─── matches ─────────────────────────────────────────────────────────────
     match /matches/{matchId} {
-      allow read: if isAuth();
+      allow read: if isApproved();
       allow write: if isAdmin();
     }
 
     // ─── predictions ─────────────────────────────────────────────────────────
     match /predictions/{predId} {
-      allow read: if isAuth() && (
+      allow read: if isApproved() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
 
-      allow create: if isOwner(request.resource.data.userId)
+      allow create: if isApproved()
+        && isOwner(request.resource.data.userId)
         && request.resource.data.matchId is string
         && request.resource.data.pointsEarned == null
         && validScore(request.resource.data.predictedHome)
@@ -78,9 +87,9 @@ service cloud.firestore {
         && !matchDeadlinePassed(request.resource.data.matchId);
 
       allow update: if (
-          isOwner(resource.data.userId)
+          isApproved()
+          && isOwner(resource.data.userId)
           && !matchDeadlinePassed(resource.data.matchId)
-          // Users cannot change ownership, matchId, or points
           && request.resource.data.userId == resource.data.userId
           && request.resource.data.matchId == resource.data.matchId
           && request.resource.data.pointsEarned == resource.data.pointsEarned
