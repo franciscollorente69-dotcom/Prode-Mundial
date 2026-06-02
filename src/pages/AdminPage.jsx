@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch } from '../firebase/firestore'
+import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -13,6 +13,12 @@ export default function AdminPage() {
   const [scores, setScores] = useState({})
   const [saving, setSaving] = useState({})
   const [calculating, setCalculating] = useState({})
+  const [users, setUsers] = useState([])
+  const [usersLoading, setUsersLoading] = useState(true)
+
+  useEffect(() => {
+    getUsers().then((data) => { setUsers(data); setUsersLoading(false) }).catch(() => setUsersLoading(false))
+  }, [])
 
   useEffect(() => {
     const unsub = subscribeMatches((data) => {
@@ -35,7 +41,7 @@ export default function AdminPage() {
   }, [])
 
   const handleSeed = async () => {
-    if (!window.confirm('¿Cargar los 48 partidos de la fase de grupos y los knockouts? Esto no se puede deshacer.')) return
+    if (!window.confirm('¿Cargar los 72 partidos de la fase de grupos y los 32 knockouts? Esto no se puede deshacer.')) return
     setSeeding(true)
     setSeedMsg('')
     try {
@@ -99,7 +105,7 @@ export default function AdminPage() {
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-6">
         <h2 className="font-bold text-white text-sm mb-1">Cargar datos del Mundial</h2>
         <p className="text-xs text-gray-400 mb-3">
-          Carga los 48 partidos de la fase de grupos (16 grupos de 3 equipos) + partidos de eliminación directa como placeholders.
+          Carga los 72 partidos de la fase de grupos (12 grupos de 4 equipos) + 32 partidos de eliminación directa como placeholders. Total: 104 partidos.
         </p>
         <button
           onClick={handleSeed}
@@ -264,6 +270,61 @@ export default function AdminPage() {
           <div className="text-center py-12 text-gray-600 text-sm">
             No hay partidos en esta fase. Cargá los datos primero.
           </div>
+        )}
+      </div>
+
+      {/* Users section */}
+      <div className="mt-8">
+        <h2 className="text-lg font-black text-white mb-1">Usuarios Registrados</h2>
+        {usersLoading ? (
+          <p className="text-sm text-gray-500">Cargando usuarios...</p>
+        ) : (
+          <>
+            <p className="text-4xl font-black text-green-400 mb-4">{users.length}</p>
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-800 text-gray-500 text-left">
+                      <th className="px-3 py-2 font-semibold">Nombre</th>
+                      <th className="px-3 py-2 font-semibold">Usuario</th>
+                      <th className="px-3 py-2 font-semibold">Email</th>
+                      <th className="px-3 py-2 font-semibold text-right">Pts</th>
+                      <th className="px-3 py-2 font-semibold">Registro</th>
+                      <th className="px-3 py-2 font-semibold">Admin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id} className="border-b border-gray-800/50 last:border-0">
+                        <td className="px-3 py-2 text-white font-medium truncate max-w-[120px]">{u.displayName || '—'}</td>
+                        <td className="px-3 py-2 text-gray-400">@{u.username || '—'}</td>
+                        <td className="px-3 py-2 text-gray-400 truncate max-w-[160px]">{u.email || '—'}</td>
+                        <td className="px-3 py-2 text-green-400 font-bold text-right">{u.totalPoints ?? 0}</td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                          {u.createdAt?.toDate
+                            ? u.createdAt.toDate().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          {u.isAdmin
+                            ? <span className="text-yellow-400 font-bold">Sí</span>
+                            : <span className="text-gray-600">No</span>}
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-gray-600">
+                          No hay usuarios registrados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </div>

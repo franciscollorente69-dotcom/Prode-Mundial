@@ -144,3 +144,10 @@ export const subscribeLeaderboard = (callback) =>
 
 export const updateKnockoutMatch = async (matchId, data) =>
   updateDoc(doc(db, 'matches', matchId), data)
+
+// ─── Admin: Users ─────────────────────────────────────────────────────────────
+
+export const getUsers = async () => {
+  const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
