@@ -145,6 +145,17 @@ export const subscribeLeaderboard = (callback) =>
 export const updateKnockoutMatch = async (matchId, data) =>
   updateDoc(doc(db, 'matches', matchId), data)
 
+export const deleteAllMatches = async () => {
+  const snap = await getDocs(collection(db, 'matches'))
+  const BATCH_SIZE = 400
+  for (let i = 0; i < snap.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    snap.docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+  return snap.docs.length
+}
+
 // ─── Admin: Users ─────────────────────────────────────────────────────────────
 
 export const getUsers = async () => {

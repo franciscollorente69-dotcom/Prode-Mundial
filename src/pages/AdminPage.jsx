@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers } from '../firebase/firestore'
+import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers, deleteAllMatches } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [scores, setScores] = useState({})
   const [saving, setSaving] = useState({})
   const [calculating, setCalculating] = useState({})
+  const [deleting, setDeleting] = useState(false)
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(true)
 
@@ -39,6 +40,20 @@ export default function AdminPage() {
     })
     return unsub
   }, [])
+
+  const handleDelete = async () => {
+    if (!window.confirm('⚠️ ¿Eliminar TODOS los partidos? Esta acción no se puede deshacer.')) return
+    setDeleting(true)
+    setSeedMsg('')
+    try {
+      const count = await deleteAllMatches()
+      setSeedMsg(`🗑️ ${count} partidos eliminados.`)
+    } catch (e) {
+      setSeedMsg(`❌ Error: ${e.message}`)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleSeed = async () => {
     if (!window.confirm('¿Cargar los 72 partidos de la fase de grupos y los 32 knockouts? Esto no se puede deshacer.')) return
@@ -108,8 +123,15 @@ export default function AdminPage() {
           Carga los 72 partidos de la fase de grupos (12 grupos de 4 equipos) + 32 partidos de eliminación directa como placeholders. Total: 104 partidos.
         </p>
         <button
+          onClick={handleDelete}
+          disabled={deleting || seeding}
+          className="block w-full bg-red-700 hover:bg-red-600 disabled:bg-red-900 disabled:text-red-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors mb-2"
+        >
+          {deleting ? '⏳ Eliminando...' : '🗑️ Eliminar todos los partidos'}
+        </button>
+        <button
           onClick={handleSeed}
-          disabled={seeding}
+          disabled={seeding || deleting}
           className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
         >
           {seeding ? '⏳ Cargando...' : '🌍 Cargar partidos del Mundial 2026'}
