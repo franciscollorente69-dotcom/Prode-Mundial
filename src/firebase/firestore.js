@@ -6,9 +6,11 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -150,14 +152,75 @@ export const updateKnockoutMatch = async (matchId, data) =>
 export const deleteAllMatches = async () => {
   const snap = await getDocs(collection(db, 'matches'))
   const BATCH_SIZE = 490
-  let deleted = 0
   for (let i = 0; i < snap.docs.length; i += BATCH_SIZE) {
     const batch = writeBatch(db)
-    for (const d of snap.docs.slice(i, i + BATCH_SIZE)) {
-      batch.delete(doc(db, 'matches', d.id))
-      deleted++
-    }
+    snap.docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref))
     await batch.commit()
   }
-  return deleted
+  return snap.docs.length
+}
+
+// ─── Config / Prize ───────────────────────────────────────────────────────────
+
+export const subscribePrize = (callback) =>
+  onSnapshot(doc(db, 'config', 'general'), (snap) =>
+    callback(snap.exists() ? (snap.data().prize ?? 0) : 0)
+  )
+
+export const savePrize = async (amount) =>
+  setDoc(doc(db, 'config', 'general'), { prize: Number(amount) }, { merge: true })
+
+// ─── Streak / badge data ──────────────────────────────────────────────────────
+
+export const getLastFinishedMatches = async (count = 3) => {
+  const snap = await getDocs(
+    query(collection(db, 'matches'), where('isFinished', '==', true), orderBy('matchDate', 'desc'), limit(count))
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export const getPredictionsForMatches = async (matchIds) => {
+  if (!matchIds.length) return []
+  const snap = await getDocs(
+    query(collection(db, 'predictions'), where('matchId', 'in', matchIds))
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+// ─── Admin: Users ─────────────────────────────────────────────────────────────
+// NOTE: getUsers() fetches ALL users with a single query (no composite index needed).
+// pendingUsers is derived client-side to avoid the composite-index requirement
+// that a (where + orderBy) Firestore query would impose.
+
+export const getUsers = async () => {
+  // Use a simple collection scan — no orderBy so no index issues.
+  const snap = await getDocs(collection(db, 'users'))
+  const users = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  // Sort by createdAt descending (client-side, safe even if field is missing)
+  users.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+  return users
+}
+
+// Derived from getUsers() — no separate Firestore query needed.
+// A user is "pending" if they are not an admin AND their approved field is not true.
+// This also catches users who registered before the approved field was added.
+export const getPendingUsers = async () => {
+  const all = await getUsers()
+  return all.filter(u => !u.isAdmin && !u.approved)
+}
+
+export const approveUser = async (uid) =>
+  updateDoc(doc(db, 'users', uid), { approved: true })
+
+// ─── Admin: Delete user + their predictions ───────────────────────────────────
+
+export const deleteUser = async (uid) => {
+  const predsSnap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', uid)))
+  const BATCH_SIZE = 400
+  for (let i = 0; i < predsSnap.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    predsSnap.docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+  await deleteDoc(doc(db, 'users', uid))
 }

@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { registerUser } from '../firebase/auth'
+import { logoutUser } from '../firebase/auth'
 
 export default function RegisterPage() {
-  const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [registered, setRegistered] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -24,7 +25,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await registerUser(form.email, form.password, form.username, form.displayName || form.username)
-      navigate('/')
+      setRegistered(true)
     } catch (err) {
       const msgs = {
         'auth/email-already-in-use': 'Ya existe una cuenta con ese email.',
@@ -35,6 +36,27 @@ export default function RegisterPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-4 py-12">
+        <div className="w-full max-w-sm text-center">
+          <div className="text-6xl mb-4">⏳</div>
+          <h2 className="text-xl font-black text-white mb-3">Cuenta creada</h2>
+          <p className="text-gray-300 text-sm mb-6 leading-relaxed">
+            Tu cuenta está pendiente de aprobación.<br />
+            El administrador te habilitará pronto.
+          </p>
+          <button
+            onClick={() => logoutUser()}
+            className="text-sm text-gray-400 hover:text-white underline"
+          >
+            Volver al inicio de sesión
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { subscribeLeaderboard } from '../firebase/firestore'
+import { subscribeLeaderboard, subscribePrize, getLastFinishedMatches, getPredictionsForMatches } from '../firebase/firestore'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const MEDAL = ['🥇', '🥈', '🥉']
@@ -9,6 +9,9 @@ export default function LeaderboardPage() {
   const { user, profile } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [prize, setPrize] = useState(null)
+  // badges: { [uid]: { fire: bool, sad: bool } }
+  const [badges, setBadges] = useState({})
 
   useEffect(() => {
     const unsub = subscribeLeaderboard((data) => {
@@ -18,6 +21,48 @@ export default function LeaderboardPage() {
     return unsub
   }, [])
 
+  useEffect(() => {
+    const unsub = subscribePrize(setPrize)
+    return unsub
+  }, [])
+
+  // Load streak badges once we have users
+  useEffect(() => {
+    if (!users.length) return
+    let cancelled = false
+    const loadBadges = async () => {
+      try {
+        const lastMatches = await getLastFinishedMatches(3)
+        if (!lastMatches.length || cancelled) return
+        const matchIds = lastMatches.map((m) => m.id)
+        const preds = await getPredictionsForMatches(matchIds)
+        if (cancelled) return
+        // Group predictions by userId
+        const byUser = {}
+        for (const p of preds) {
+          if (!byUser[p.userId]) byUser[p.userId] = {}
+          byUser[p.userId][p.matchId] = p.pointsEarned
+        }
+        const result = {}
+        for (const u of users) {
+          const userPreds = byUser[u.uid] || {}
+          const pts = matchIds.map((id) => userPreds[id])
+          // Only badge if user has predictions for all 3 matches
+          const hasAll = pts.every((p) => p !== undefined)
+          if (hasAll) {
+            result[u.uid] = {
+              fire: pts.every((p) => p === 3),
+              sad: pts.every((p) => p === 0),
+            }
+          }
+        }
+        setBadges(result)
+      } catch (_) {}
+    }
+    loadBadges()
+    return () => { cancelled = true }
+  }, [users.length])
+
   const myRank = users.findIndex((u) => u.uid === user?.uid) + 1
 
   if (loading) return <LoadingSpinner />
@@ -25,7 +70,18 @@ export default function LeaderboardPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
       <h1 className="text-xl font-black text-white mb-1">Tabla de Posiciones</h1>
-      <p className="text-xs text-gray-500 mb-5">Se actualiza en tiempo real</p>
+      <p className="text-xs text-gray-500 mb-4">Se actualiza en tiempo real</p>
+
+      {/* Prize banner */}
+      {prize !== null && prize > 0 && (
+        <div className="bg-gradient-to-r from-yellow-900/40 to-yellow-800/20 border border-yellow-600/30 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-2xl">🏆</span>
+          <div>
+            <p className="text-xs text-yellow-500/80 font-medium uppercase tracking-wide">Premio acumulado</p>
+            <p className="text-xl font-black text-yellow-400">${prize.toLocaleString('es-AR')}</p>
+          </div>
+        </div>
+      )}
 
       {/* My rank card */}
       {myRank > 0 && (
@@ -55,6 +111,9 @@ export default function LeaderboardPage() {
           {users.map((u, i) => {
             const rank = i + 1
             const isMe = u.uid === user?.uid
+            const isFirst = rank === 1
+            const isLast = rank === users.length && users.length > 1
+            const streak = badges[u.uid]
             return (
               <div
                 key={u.id}
@@ -84,6 +143,10 @@ export default function LeaderboardPage() {
                   <p className={`font-semibold text-sm truncate ${isMe ? 'text-green-300' : 'text-white'}`}>
                     {u.displayName || u.username}
                     {isMe && <span className="text-xs text-green-500 ml-1">(vos)</span>}
+                    {isFirst && <span className="ml-1" title="1er lugar">⭐</span>}
+                    {isLast && <span className="ml-1" title="Último lugar">💀</span>}
+                    {streak?.fire && <span className="ml-1" title="Últimos 3 partidos perfectos">🔥</span>}
+                    {streak?.sad && <span className="ml-1" title="0 puntos en últimos 3 partidos">😢</span>}
                   </p>
                   <p className="text-xs text-gray-500 truncate">@{u.username}</p>
                 </div>

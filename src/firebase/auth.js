@@ -22,6 +22,7 @@ export const registerUser = async (email, password, username, displayName) => {
     username: username.toLowerCase(),
     displayName,
     isAdmin: false,
+    approved: false,
     totalPoints: 0,
     createdAt: serverTimestamp(),
   })

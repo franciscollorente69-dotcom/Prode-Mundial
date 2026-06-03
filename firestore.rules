@@ -17,52 +17,93 @@ service cloud.firestore {
     }
 
     function matchDeadlinePassed(matchId) {
-      let match = get(/databases/$(database)/documents/matches/$(matchId));
-      // Deadline = matchDate - 10 minutes
-      return request.time > match.data.matchDate - duration.value(10, 'm');
+      let matchDoc = get(/databases/$(database)/documents/matches/$(matchId));
+      return request.time > matchDoc.data.matchDate - duration.value(10, 'm');
+    }
+
+    function validScore(val) {
+      return val is int && val >= 0 && val <= 30;
+    }
+
+    function isApproved() {
+      return isAuth() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
+      );
     }
 
     // ─── users ───────────────────────────────────────────────────────────────
     match /users/{uid} {
+      // Any authenticated user can read profiles (needed for approval check on login)
       allow read: if isAuth();
+
       allow create: if isOwner(uid)
         && request.resource.data.isAdmin == false
-        && request.resource.data.totalPoints == 0;
-      allow update: if (isOwner(uid) && !('isAdmin' in request.resource.data.diff(resource.data)))
-        || isAdmin();
+        && request.resource.data.totalPoints == 0
+        && request.resource.data.uid == uid
+        && request.resource.data.email is string
+        && request.resource.data.username is string
+        && request.resource.data.displayName is string;
+
+      allow update: if (
+          isOwner(uid)
+          // Users cannot escalate privileges or tamper with points
+          && request.resource.data.isAdmin == resource.data.isAdmin
+          && request.resource.data.totalPoints == resource.data.totalPoints
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.createdAt == resource.data.createdAt
+        ) || isAdmin();
+
+      allow delete: if isAdmin();
     }
 
     // ─── usernames (unique index) ─────────────────────────────────────────────
     match /usernames/{username} {
       allow read: if true;
-      allow create: if isAuth() && request.resource.data.uid == request.auth.uid;
+      allow create: if isAuth()
+        && request.resource.data.uid == request.auth.uid
+        && username.matches('^[a-z0-9_]{3,20}$');
       allow delete: if isAdmin();
+    }
+
+    // ─── config ──────────────────────────────────────────────────────────────
+    match /config/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
     }
 
     // ─── matches ─────────────────────────────────────────────────────────────
     match /matches/{matchId} {
-      allow read: if isAuth();
+      allow read: if isApproved();
       allow write: if isAdmin();
     }
 
     // ─── predictions ─────────────────────────────────────────────────────────
     match /predictions/{predId} {
-      allow read: if isAuth() && (
+      allow read: if isApproved() && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
 
-      // Create: must own it, match must not be closed, cannot set points
-      allow create: if isOwner(request.resource.data.userId)
+      allow create: if isApproved()
+        && isOwner(request.resource.data.userId)
         && request.resource.data.matchId is string
         && request.resource.data.pointsEarned == null
+        && validScore(request.resource.data.predictedHome)
+        && validScore(request.resource.data.predictedAway)
         && !matchDeadlinePassed(request.resource.data.matchId);
 
-      // Update: can change scores before deadline; admin can set points
       allow update: if (
-          isOwner(resource.data.userId)
+          isApproved()
+          && isOwner(resource.data.userId)
           && !matchDeadlinePassed(resource.data.matchId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.matchId == resource.data.matchId
           && request.resource.data.pointsEarned == resource.data.pointsEarned
+          && validScore(request.resource.data.predictedHome)
+          && validScore(request.resource.data.predictedAway)
         ) || isAdmin();
+
+      allow delete: if isAdmin();
     }
   }
 }
