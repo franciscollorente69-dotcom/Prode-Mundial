@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { subscribeMatches, subscribePredictionsByUser } from '../firebase/firestore'
+import { subscribeMatches, subscribePredictionsByUser, subscribePrize } from '../firebase/firestore'
 import MatchCard from '../components/MatchCard'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
@@ -14,6 +14,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [activeStage, setActiveStage] = useState('group')
   const [activeGroup, setActiveGroup] = useState('A')
+  const [prize, setPrize] = useState(null)
 
   useEffect(() => {
     const unsub = subscribeMatches((data) => {
@@ -28,6 +29,11 @@ export default function HomePage() {
     const unsub = subscribePredictionsByUser(user.uid, setPredictions)
     return unsub
   }, [user])
+
+  useEffect(() => {
+    const unsub = subscribePrize(setPrize)
+    return unsub
+  }, [])
 
   const predMap = useMemo(() => {
     const m = {}
@@ -57,6 +63,17 @@ export default function HomePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
+      {/* Prize banner */}
+      {prize !== null && prize > 0 && (
+        <div className="bg-gradient-to-r from-yellow-900/40 to-yellow-800/20 border border-yellow-600/30 rounded-2xl px-4 py-3 mb-5 flex items-center gap-3">
+          <span className="text-2xl">🏆</span>
+          <div>
+            <p className="text-xs text-yellow-500/80 font-medium uppercase tracking-wide">Premio acumulado</p>
+            <p className="text-xl font-black text-yellow-400">${prize.toLocaleString('es-AR')}</p>
+          </div>
+        </div>
+      )}
+
       {/* Stage tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
         {stages.map((s) => (

@@ -6,9 +6,11 @@ import {
   addDoc,
   updateDoc,
   setDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -144,6 +146,46 @@ export const subscribeLeaderboard = (callback) =>
 
 export const updateKnockoutMatch = async (matchId, data) =>
   updateDoc(doc(db, 'matches', matchId), data)
+
+// ─── Config / Prize ───────────────────────────────────────────────────────────
+
+export const subscribePrize = (callback) =>
+  onSnapshot(doc(db, 'config', 'general'), (snap) =>
+    callback(snap.exists() ? (snap.data().prize ?? 0) : 0)
+  )
+
+export const savePrize = async (amount) =>
+  setDoc(doc(db, 'config', 'general'), { prize: Number(amount) }, { merge: true })
+
+// ─── Streak / badge data ──────────────────────────────────────────────────────
+
+export const getLastFinishedMatches = async (count = 3) => {
+  const snap = await getDocs(
+    query(collection(db, 'matches'), where('isFinished', '==', true), orderBy('matchDate', 'desc'), limit(count))
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+export const getPredictionsForMatches = async (matchIds) => {
+  if (!matchIds.length) return []
+  const snap = await getDocs(
+    query(collection(db, 'predictions'), where('matchId', 'in', matchIds))
+  )
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
+// ─── Admin: Delete user ────────────────────────────────────────────────────────
+
+export const deleteUser = async (uid) => {
+  const predsSnap = await getDocs(query(collection(db, 'predictions'), where('userId', '==', uid)))
+  const BATCH_SIZE = 400
+  for (let i = 0; i < predsSnap.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    predsSnap.docs.slice(i, i + BATCH_SIZE).forEach((d) => batch.delete(d.ref))
+    await batch.commit()
+  }
+  await deleteDoc(doc(db, 'users', uid))
+}
 
 export const deleteAllMatches = async () => {
   const snap = await getDocs(collection(db, 'matches'))

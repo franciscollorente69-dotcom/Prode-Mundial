@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers, getPendingUsers, approveUser, deleteAllMatches } from '../firebase/firestore'
+import { subscribeMatches, updateMatchResult, calculateAndSavePoints, updateKnockoutMatch, getUsers, getPendingUsers, approveUser, deleteAllMatches, deleteUser, subscribePrize, savePrize } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -18,6 +18,11 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(true)
   const [pendingUsers, setPendingUsers] = useState([])
   const [approvingId, setApprovingId] = useState(null)
+  const [deletingUserId, setDeletingUserId] = useState(null)
+  const [prize, setPrize] = useState(0)
+  const [prizeInput, setPrizeInput] = useState('')
+  const [savingPrize, setSavingPrize] = useState(false)
+  const [prizeMsg, setPrizeMsg] = useState('')
 
   const reloadUsers = () => {
     Promise.all([getUsers(), getPendingUsers()]).then(([all, pending]) => {
@@ -28,6 +33,11 @@ export default function AdminPage() {
   }
 
   useEffect(() => { reloadUsers() }, [])
+
+  useEffect(() => {
+    const unsub = subscribePrize((val) => { setPrize(val); setPrizeInput(String(val)) })
+    return unsub
+  }, [])
 
   useEffect(() => {
     const unsub = subscribeMatches((data) => {
@@ -62,6 +72,33 @@ export default function AdminPage() {
       setSeedMsg(`❌ Error: ${e.message}`)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleSavePrize = async () => {
+    const val = Number(prizeInput)
+    if (isNaN(val) || val < 0) return
+    setSavingPrize(true)
+    setPrizeMsg('')
+    try {
+      await savePrize(val)
+      setPrizeMsg('✅ Premio guardado.')
+    } catch (e) {
+      setPrizeMsg(`❌ ${e.message}`)
+    } finally {
+      setSavingPrize(false)
+      setTimeout(() => setPrizeMsg(''), 3000)
+    }
+  }
+
+  const handleDeleteUser = async (u) => {
+    if (!window.confirm(`¿Eliminar a @${u.username}? Se eliminarán todos sus pronósticos. Esta acción no se puede deshacer.`)) return
+    setDeletingUserId(u.id)
+    try {
+      await deleteUser(u.id)
+      reloadUsers()
+    } finally {
+      setDeletingUserId(null)
     }
   }
 
@@ -135,6 +172,32 @@ export default function AdminPage() {
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
       <h1 className="text-xl font-black text-white mb-1">Panel de Administración</h1>
       <p className="text-xs text-gray-500 mb-5">Solo visible para admins</p>
+
+      {/* Prize editor */}
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-6">
+        <h2 className="font-bold text-white text-sm mb-1">💰 Premio Acumulado</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Actual: <span className="text-yellow-400 font-bold">${prize.toLocaleString('es-AR')}</span>
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="0"
+            value={prizeInput}
+            onChange={(e) => setPrizeInput(e.target.value)}
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500"
+            placeholder="Ej: 50000"
+          />
+          <button
+            onClick={handleSavePrize}
+            disabled={savingPrize}
+            className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-900 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            {savingPrize ? '...' : 'Guardar'}
+          </button>
+        </div>
+        {prizeMsg && <p className="mt-2 text-xs text-green-400">{prizeMsg}</p>}
+      </div>
 
       {/* Pending users */}
       {!usersLoading && pendingUsers.length > 0 && (
@@ -367,6 +430,7 @@ export default function AdminPage() {
                       <th className="px-3 py-2 font-semibold">Registro</th>
                       <th className="px-3 py-2 font-semibold">Admin</th>
                       <th className="px-3 py-2 font-semibold">Aprobado</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -390,6 +454,18 @@ export default function AdminPage() {
                           {u.isAdmin || u.approved
                             ? <span title="Aprobado">✅</span>
                             : <span title="Pendiente">⏳</span>}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {!u.isAdmin && (
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={deletingUserId === u.id}
+                              className="text-red-500 hover:text-red-400 disabled:text-red-900 transition-colors text-base leading-none"
+                              title={`Eliminar a @${u.username}`}
+                            >
+                              {deletingUserId === u.id ? '...' : '🗑️'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

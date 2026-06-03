@@ -1,12 +1,34 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { logoutUser } from '../firebase/auth'
+import { subscribeMatches, subscribePredictionsByUser } from '../firebase/firestore'
 
 export default function Navbar() {
   const { user, profile } = useAuth()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [allMatches, setAllMatches] = useState([])
+  const [predictions, setPredictions] = useState([])
+
+  useEffect(() => {
+    if (!user) return
+    const unsubM = subscribeMatches(setAllMatches)
+    const unsubP = subscribePredictionsByUser(user.uid, setPredictions)
+    return () => { unsubM(); unsubP() }
+  }, [user])
+
+  const unpredictedCount = useMemo(() => {
+    if (!user) return 0
+    const now = Date.now()
+    const deadline = 10 * 60 * 1000
+    const predMatchIds = new Set(predictions.map((p) => p.matchId))
+    return allMatches.filter((m) => {
+      if (m.isFinished) return false
+      const matchTime = m.matchDate?.toDate ? m.matchDate.toDate().getTime() : new Date(m.matchDate).getTime()
+      return matchTime - now > deadline && !predMatchIds.has(m.id)
+    }).length
+  }, [allMatches, predictions, user])
 
   const handleLogout = async () => {
     await logoutUser()
@@ -35,7 +57,16 @@ export default function Navbar() {
         {/* Desktop nav */}
         {user && (
           <div className="hidden md:flex items-center gap-6">
-            <NavLink to="/" end className={navClass}>Partidos</NavLink>
+            <NavLink to="/" end className={navClass}>
+              <span className="relative inline-flex items-center gap-1">
+                Partidos
+                {unpredictedCount > 0 && (
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black leading-none">
+                    {unpredictedCount > 9 ? '9+' : unpredictedCount}
+                  </span>
+                )}
+              </span>
+            </NavLink>
             <NavLink to="/mis-pronosticos" className={navClass}>Mis Pronósticos</NavLink>
             <NavLink to="/tabla" className={navClass}>Tabla</NavLink>
             {profile?.isAdmin && (
@@ -90,7 +121,16 @@ export default function Navbar() {
               {profile?.totalPoints ?? 0} pts
             </span>
           </div>
-          <NavLink to="/" end className={navClass} onClick={() => setMenuOpen(false)}>⚽ Partidos</NavLink>
+          <NavLink to="/" end className={navClass} onClick={() => setMenuOpen(false)}>
+            <span className="inline-flex items-center gap-1.5">
+              ⚽ Partidos
+              {unpredictedCount > 0 && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black leading-none">
+                  {unpredictedCount > 9 ? '9+' : unpredictedCount}
+                </span>
+              )}
+            </span>
+          </NavLink>
           <NavLink to="/mis-pronosticos" className={navClass} onClick={() => setMenuOpen(false)}>📋 Mis Pronósticos</NavLink>
           <NavLink to="/tabla" className={navClass} onClick={() => setMenuOpen(false)}>🏅 Tabla de Posiciones</NavLink>
           {profile?.isAdmin && (
