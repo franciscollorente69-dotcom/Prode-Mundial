@@ -578,6 +578,7 @@ export default function AdminPage() {
                     <th className="px-3 py-2 font-semibold">Nombre</th>
                     <th className="px-3 py-2 font-semibold">Usuario</th>
                     <th className="px-3 py-2 font-semibold hidden sm:table-cell">Email</th>
+                    <th className="px-3 py-2 font-semibold hidden md:table-cell">Celular</th>
                     <th className="px-3 py-2 font-semibold text-right">Pts</th>
                     <th className="px-3 py-2 font-semibold text-center">Admin</th>
                     <th className="px-3 py-2 font-semibold text-center">Estado</th>
@@ -593,6 +594,9 @@ export default function AdminPage() {
                       <td className="px-3 py-2.5 text-gray-400">@{u.username || '—'}</td>
                       <td className="px-3 py-2.5 text-gray-400 truncate max-w-[160px] hidden sm:table-cell">
                         {u.email || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-400 hidden md:table-cell">
+                        {u.phone || '—'}
                       </td>
                       <td className="px-3 py-2.5 text-green-400 font-bold text-right">
                         {u.totalPoints ?? 0}

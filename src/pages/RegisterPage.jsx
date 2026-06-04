@@ -4,7 +4,7 @@ import { registerUser } from '../firebase/auth'
 import { logoutUser } from '../firebase/auth'
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '' })
+  const [form, setForm] = useState({ email: '', password: '', username: '', displayName: '', phone: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [registered, setRegistered] = useState(false)
@@ -22,9 +22,13 @@ export default function RegisterPage() {
       setError('El usuario debe tener entre 3 y 20 caracteres (letras, números, _).')
       return
     }
+    if (!form.phone.trim()) {
+      setError('El celular es obligatorio.')
+      return
+    }
     setLoading(true)
     try {
-      await registerUser(form.email, form.password, form.username, form.displayName || form.username)
+      await registerUser(form.email, form.password, form.username, form.displayName || form.username, form.phone.trim())
       setRegistered(true)
     } catch (err) {
       const msgs = {
@@ -126,6 +130,19 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-green-500 transition-colors"
                 placeholder="Mín. 6 caracteres"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                Celular <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={set('phone')}
+                required
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-green-500 transition-colors"
+                placeholder="Ej: 1123456789"
               />
             </div>
             <button

@@ -7,7 +7,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from './config'
 
-export const registerUser = async (email, password, username, displayName) => {
+export const registerUser = async (email, password, username, displayName, phone = '') => {
   const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()))
   if (usernameDoc.exists()) {
     throw new Error('El nombre de usuario ya está en uso')
@@ -21,6 +21,7 @@ export const registerUser = async (email, password, username, displayName) => {
     email,
     username: username.toLowerCase(),
     displayName,
+    phone,
     isAdmin: false,
     approved: false,
     totalPoints: 0,
