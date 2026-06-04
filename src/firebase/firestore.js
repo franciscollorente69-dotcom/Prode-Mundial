@@ -168,12 +168,11 @@ export const subscribePrize = (callback) =>
     callback(snap.exists() ? (snap.data().prize ?? 0) : 0)
   )
 
-// Increment the prize by `amount` (add a new contribution)
 export const addToPrize = async (amount) => {
   const ref = doc(db, 'config', 'general')
-  // updateDoc with increment requires the doc to exist first
-  await setDoc(ref, { prize: 0 }, { merge: true })
-  await updateDoc(ref, { prize: increment(Number(amount)) })
+  const snap = await getDoc(ref)
+  const current = snap.exists() ? (snap.data().prize ?? 0) : 0
+  await setDoc(ref, { prize: current + Number(amount) }, { merge: true })
 }
 
 // Overwrite the prize with an exact value (admin correction)
