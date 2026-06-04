@@ -9,7 +9,8 @@ import {
   deleteUser,
   deleteAllMatches,
   subscribePrize,
-  savePrize,
+  addToPrize,
+  setPrizeExact,
 } from '../firebase/firestore'
 import { seedMatches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
@@ -36,7 +37,9 @@ export default function AdminPage() {
 
   // ── Prize state ────────────────────────────────────────────────────────────
   const [prize, setPrize] = useState(0)
-  const [prizeInput, setPrizeInput] = useState('')
+  const [addInput, setAddInput] = useState('')       // amount to ADD
+  const [correctInput, setCorrectInput] = useState('')  // exact correction value
+  const [showCorrect, setShowCorrect] = useState(false)
   const [savingPrize, setSavingPrize] = useState(false)
   const [prizeMsg, setPrizeMsg] = useState('')
 
@@ -93,7 +96,6 @@ export default function AdminPage() {
   useEffect(() => {
     const unsub = subscribePrize((val) => {
       setPrize(val)
-      setPrizeInput(String(val))
     })
     return unsub
   }, [])
@@ -183,19 +185,39 @@ export default function AdminPage() {
     })
   }
 
-  const handleSavePrize = async () => {
-    const val = Number(prizeInput)
-    if (isNaN(val) || val < 0) return
+  const handleAddPrize = async () => {
+    const val = Number(addInput)
+    if (isNaN(val) || val <= 0) return
     setSavingPrize(true)
     setPrizeMsg('')
     try {
-      await savePrize(val)
-      setPrizeMsg('✅ Premio guardado.')
+      await addToPrize(val)
+      setAddInput('')
+      setPrizeMsg(`✅ +$${val.toLocaleString('es-AR')} sumados. Nuevo total: $${(prize + val).toLocaleString('es-AR')}`)
     } catch (e) {
       setPrizeMsg(`❌ ${e.message}`)
     } finally {
       setSavingPrize(false)
-      setTimeout(() => setPrizeMsg(''), 3000)
+      setTimeout(() => setPrizeMsg(''), 4000)
+    }
+  }
+
+  const handleCorrectPrize = async () => {
+    const val = Number(correctInput)
+    if (isNaN(val) || val < 0) return
+    if (!window.confirm(`¿Corregir el premio a exactamente $${val.toLocaleString('es-AR')}? Esto reemplazará el valor acumulado.`)) return
+    setSavingPrize(true)
+    setPrizeMsg('')
+    try {
+      await setPrizeExact(val)
+      setCorrectInput('')
+      setShowCorrect(false)
+      setPrizeMsg(`✅ Premio corregido a $${val.toLocaleString('es-AR')}.`)
+    } catch (e) {
+      setPrizeMsg(`❌ ${e.message}`)
+    } finally {
+      setSavingPrize(false)
+      setTimeout(() => setPrizeMsg(''), 4000)
     }
   }
 
@@ -287,27 +309,74 @@ export default function AdminPage() {
       {/* ── 2. PRIZE ── */}
       <section className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-6">
         <h2 className="font-bold text-white text-sm mb-1">💰 Premio Acumulado</h2>
-        <p className="text-xs text-gray-400 mb-3">
-          Actual: <span className="text-yellow-400 font-bold">${prize.toLocaleString('es-AR')}</span>
-        </p>
-        <div className="flex gap-2">
+
+        {/* Current total — prominent display */}
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="text-xs text-yellow-500/80 font-medium uppercase tracking-wide">Premio actual</span>
+          <span className="text-2xl font-black text-yellow-400">${prize.toLocaleString('es-AR')}</span>
+        </div>
+
+        {/* Add amount */}
+        <p className="text-xs font-medium text-gray-400 mb-1.5">Agregar monto recibido</p>
+        <div className="flex gap-2 mb-3">
           <input
             type="number"
-            min="0"
-            value={prizeInput}
-            onChange={(e) => setPrizeInput(e.target.value)}
+            min="1"
+            value={addInput}
+            onChange={(e) => setAddInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddPrize()}
             className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-yellow-500"
-            placeholder="Ej: 50000"
+            placeholder="Ej: 5000"
           />
           <button
-            onClick={handleSavePrize}
-            disabled={savingPrize}
-            className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-900 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+            onClick={handleAddPrize}
+            disabled={savingPrize || !addInput || Number(addInput) <= 0}
+            className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-900 disabled:text-yellow-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
           >
-            {savingPrize ? '...' : 'Guardar'}
+            {savingPrize ? '...' : '➕ Sumar al premio'}
           </button>
         </div>
-        {prizeMsg && <p className="mt-2 text-xs text-green-400">{prizeMsg}</p>}
+
+        {/* Feedback */}
+        {prizeMsg && (
+          <p className={`text-xs mb-3 ${prizeMsg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>
+            {prizeMsg}
+          </p>
+        )}
+
+        {/* Correction (collapsed by default) */}
+        <button
+          onClick={() => setShowCorrect((v) => !v)}
+          className="text-xs text-gray-600 hover:text-gray-400 underline transition-colors"
+        >
+          {showCorrect ? '▲ Ocultar corrección' : '✏️ Corregir premio total'}
+        </button>
+
+        {showCorrect && (
+          <div className="mt-3 pt-3 border-t border-gray-800">
+            <p className="text-xs text-gray-500 mb-2">
+              Ingresá el valor exacto correcto (reemplaza el acumulado actual).
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0"
+                value={correctInput}
+                onChange={(e) => setCorrectInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCorrectPrize()}
+                className="flex-1 bg-gray-800 border border-red-700/50 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500"
+                placeholder={`Actual: ${prize}`}
+              />
+              <button
+                onClick={handleCorrectPrize}
+                disabled={savingPrize || correctInput === ''}
+                className="bg-red-700 hover:bg-red-600 disabled:bg-red-950 disabled:text-red-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
+              >
+                {savingPrize ? '...' : 'Corregir'}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── 3. SEED / DELETE matches ── */}

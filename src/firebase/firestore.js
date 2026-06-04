@@ -14,6 +14,7 @@ import {
   onSnapshot,
   serverTimestamp,
   writeBatch,
+  increment,
 } from 'firebase/firestore'
 import { db } from './config'
 
@@ -167,8 +168,20 @@ export const subscribePrize = (callback) =>
     callback(snap.exists() ? (snap.data().prize ?? 0) : 0)
   )
 
-export const savePrize = async (amount) =>
+// Increment the prize by `amount` (add a new contribution)
+export const addToPrize = async (amount) => {
+  const ref = doc(db, 'config', 'general')
+  // updateDoc with increment requires the doc to exist first
+  await setDoc(ref, { prize: 0 }, { merge: true })
+  await updateDoc(ref, { prize: increment(Number(amount)) })
+}
+
+// Overwrite the prize with an exact value (admin correction)
+export const setPrizeExact = async (amount) =>
   setDoc(doc(db, 'config', 'general'), { prize: Number(amount) }, { merge: true })
+
+// Keep old name as alias so nothing else breaks
+export const savePrize = addToPrize
 
 // ─── Streak / badge data ──────────────────────────────────────────────────────
 
