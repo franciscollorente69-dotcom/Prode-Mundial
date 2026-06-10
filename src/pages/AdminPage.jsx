@@ -12,7 +12,7 @@ import {
   addToPrize,
   setPrizeExact,
 } from '../firebase/firestore'
-import { seedMatches } from '../firebase/seedData'
+import { seedMatches, fixMatchTimes } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -134,6 +134,20 @@ export default function AdminPage() {
     try {
       const result = await seedMatches()
       setSeedMsg(`✅ ${result.groupStage} partidos de grupos + ${result.knockout} knockouts = ${result.total} en total.`)
+    } catch (e) {
+      setSeedMsg(`❌ Error: ${e.message}`)
+    } finally {
+      setSeeding(false)
+    }
+  }
+
+  const handleFixTimes = async () => {
+    if (!window.confirm('¿Sumar 1 hora a todos los partidos en Firestore? Ejecutar solo una vez.')) return
+    setSeeding(true)
+    setSeedMsg('')
+    try {
+      const count = await fixMatchTimes()
+      setSeedMsg(`✅ Horario corregido en ${count} partidos (+1 hora).`)
     } catch (e) {
       setSeedMsg(`❌ Error: ${e.message}`)
     } finally {
@@ -400,6 +414,13 @@ export default function AdminPage() {
             className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
           >
             {seeding ? '⏳ Cargando...' : '⬆️ Cargar partidos'}
+          </button>
+          <button
+            onClick={handleFixTimes}
+            disabled={seeding || deleting}
+            className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-900 disabled:text-yellow-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            {seeding ? '⏳ Corrigiendo...' : '🕐 +1 hora a todos los partidos'}
           </button>
         </div>
         {seedMsg && (

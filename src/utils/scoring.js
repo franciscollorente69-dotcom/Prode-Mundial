@@ -7,8 +7,8 @@ export const computePoints = (predictedHome, predictedAway, realHome, realAway) 
 
 export const STAGE_LABELS = {
   group: 'Fase de Grupos',
-  round_of_32: 'Octavos de Final',
-  round_of_16: 'Dieciseisavos',
+  round_of_32: 'Dieciseisavos de Final',
+  round_of_16: 'Octavos de Final',
   quarterfinal: 'Cuartos de Final',
   semifinal: 'Semifinal',
   third_place: 'Tercer Puesto',

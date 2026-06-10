@@ -1,4 +1,4 @@
-import { writeBatch, doc, collection } from 'firebase/firestore'
+import { writeBatch, doc, collection, getDocs, updateDoc } from 'firebase/firestore'
 import { db } from './config'
 
 // ─── FIFA World Cup 2026 — Official groups (draw: December 5, 2025, Washington D.C.) ──
@@ -175,7 +175,7 @@ export const seedMatches = async () => {
   // Normalise group stage rows into full Firestore documents
   const groupMatches = GROUP_STAGE_MATCHES.map((m) => ({
     ...m,
-    matchDate: new Date(m.matchDate),
+    matchDate: new Date(new Date(m.matchDate).getTime() + 3_600_000),
     stage: 'group',
     homeScore: null,
     awayScore: null,
@@ -199,4 +199,27 @@ export const seedMatches = async () => {
     knockout: KNOCKOUT_MATCHES.length,
     total: allMatches.length,
   }
+}
+
+// Suma 1 hora a todos los matchDate ya cargados en Firestore.
+// Ejecutar una sola vez desde el panel de admin.
+export const fixMatchTimes = async () => {
+  const snap = await getDocs(collection(db, 'matches'))
+  const BATCH_SIZE = 400
+  const docs = snap.docs
+  let updated = 0
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    for (const d of docs.slice(i, i + BATCH_SIZE)) {
+      const current = d.data().matchDate
+      if (!current) continue
+      const date = current.toDate ? current.toDate() : new Date(current)
+      batch.update(doc(db, 'matches', d.id), {
+        matchDate: new Date(date.getTime() + 3_600_000),
+      })
+      updated++
+    }
+    await batch.commit()
+  }
+  return updated
 }
