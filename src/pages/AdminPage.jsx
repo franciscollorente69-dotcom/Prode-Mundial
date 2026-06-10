@@ -11,6 +11,8 @@ import {
   subscribePrize,
   addToPrize,
   setPrizeExact,
+  getMatches,
+  getPredictionsByUser,
 } from '../firebase/firestore'
 import { seedMatches, fixMatchTimes } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
@@ -34,6 +36,36 @@ export default function AdminPage() {
   const [usersError, setUsersError] = useState('')
   const [approvingId, setApprovingId] = useState(null)
   const [deletingUserId, setDeletingUserId] = useState(null)
+
+  // ── Prediction stats state ────────────────────────────────────────────────
+  const [predStats, setPredStats] = useState([]) // [{ uid, displayName, username, count, missing }]
+  const [predStatsLoading, setPredStatsLoading] = useState(false)
+  const [predStatsLoaded, setPredStatsLoaded] = useState(false)
+
+  const loadPredStats = async () => {
+    setPredStatsLoading(true)
+    try {
+      const [allUsers, allMatches] = await Promise.all([getUsers(), getMatches()])
+      const total = allMatches.length
+      const stats = await Promise.all(
+        allUsers.map(async (u) => {
+          const preds = await getPredictionsByUser(u.uid)
+          return {
+            uid: u.uid,
+            displayName: u.displayName || u.username,
+            username: u.username,
+            count: preds.length,
+            missing: total - preds.length,
+          }
+        })
+      )
+      stats.sort((a, b) => b.count - a.count)
+      setPredStats(stats)
+      setPredStatsLoaded(true)
+    } finally {
+      setPredStatsLoading(false)
+    }
+  }
 
   // ── Prize state ────────────────────────────────────────────────────────────
   const [prize, setPrize] = useState(0)
@@ -434,7 +466,60 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* ── 4. MATCH RESULTS ── */}
+      {/* ── 4. PREDICTION STATS ── */}
+      <section className="mb-8 bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-bold text-white">📊 Pronósticos por usuario</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Cuántos partidos pronosticó cada jugador</p>
+          </div>
+          <button
+            onClick={loadPredStats}
+            disabled={predStatsLoading}
+            className="bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            {predStatsLoading ? '⏳ Cargando...' : predStatsLoaded ? '🔄 Actualizar' : '📥 Cargar datos'}
+          </button>
+        </div>
+
+        {!predStatsLoaded && !predStatsLoading && (
+          <p className="text-sm text-gray-600 text-center py-4">Presioná "Cargar datos" para ver los pronósticos.</p>
+        )}
+
+        {predStatsLoaded && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-800 text-gray-500 text-left">
+                  <th className="pb-2 font-semibold">#</th>
+                  <th className="pb-2 font-semibold">Jugador</th>
+                  <th className="pb-2 font-semibold text-center">Pronosticados</th>
+                  <th className="pb-2 font-semibold text-center">Sin pronosticar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {predStats.map((u, i) => (
+                  <tr key={u.uid} className="border-b border-gray-800/50 last:border-0">
+                    <td className="py-2 text-gray-600">{i + 1}</td>
+                    <td className="py-2">
+                      <p className="text-white font-medium">{u.displayName}</p>
+                      <p className="text-gray-500">@{u.username}</p>
+                    </td>
+                    <td className="py-2 text-center">
+                      <span className="text-green-400 font-bold">{u.count}</span>
+                    </td>
+                    <td className="py-2 text-center">
+                      <span className={u.missing > 0 ? 'text-red-400 font-bold' : 'text-gray-600'}>{u.missing}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── 5. MATCH RESULTS ── */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
         {stages.map((s) => (
           <button
