@@ -13,6 +13,7 @@ import {
   setPrizeExact,
   getMatches,
   getPredictionsByUser,
+  getPredictionsForMatches,
 } from '../firebase/firestore'
 import { seedMatches, fixMatchTimes } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
@@ -64,6 +65,34 @@ export default function AdminPage() {
       setPredStatsLoaded(true)
     } finally {
       setPredStatsLoading(false)
+    }
+  }
+
+  // ── Predictions by match state ───────────────────────────────────────────
+  const [matchPredUsers, setMatchPredUsers] = useState([])   // loaded once
+  const [matchPredUsersLoaded, setMatchPredUsersLoaded] = useState(false)
+  const [selectedMatchId, setSelectedMatchId] = useState('')
+  const [matchPreds, setMatchPreds] = useState([])           // preds for selected match
+  const [matchPredsLoading, setMatchPredsLoading] = useState(false)
+  const [allMatchesList, setAllMatchesList] = useState([])   // for the selector
+
+  const loadMatchPredSection = async () => {
+    if (matchPredUsersLoaded) return
+    const [allUsers, allMatchesData] = await Promise.all([getUsers(), getMatches()])
+    setMatchPredUsers(allUsers)
+    setAllMatchesList(allMatchesData)
+    setMatchPredUsersLoaded(true)
+  }
+
+  const handleSelectMatch = async (matchId) => {
+    setSelectedMatchId(matchId)
+    if (!matchId) { setMatchPreds([]); return }
+    setMatchPredsLoading(true)
+    try {
+      const preds = await getPredictionsForMatches([matchId])
+      setMatchPreds(preds)
+    } finally {
+      setMatchPredsLoading(false)
     }
   }
 
@@ -519,7 +548,109 @@ export default function AdminPage() {
         )}
       </section>
 
-      {/* ── 5. MATCH RESULTS ── */}
+      {/* ── 5. PREDICTIONS BY MATCH ── */}
+      <section className="mb-8 bg-gray-900 border border-gray-800 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-base font-bold text-white">🔍 Pronósticos por partido</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Ver qué pronosticó cada jugador en un partido</p>
+          </div>
+          {!matchPredUsersLoaded && (
+            <button
+              onClick={loadMatchPredSection}
+              className="bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+            >
+              📥 Cargar partidos
+            </button>
+          )}
+        </div>
+
+        {!matchPredUsersLoaded && (
+          <p className="text-sm text-gray-600 text-center py-4">Presioná "Cargar partidos" para activar esta sección.</p>
+        )}
+
+        {matchPredUsersLoaded && (
+          <>
+            <select
+              value={selectedMatchId}
+              onChange={(e) => handleSelectMatch(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:border-green-500"
+            >
+              <option value="">— Seleccioná un partido —</option>
+              {STAGE_ORDER.filter((s) => allMatchesList.some((m) => m.stage === s)).map((s) => (
+                <optgroup key={s} label={STAGE_LABELS[s]}>
+                  {allMatchesList
+                    .filter((m) => m.stage === s)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        #{m.matchNumber} · {m.homeTeam} vs {m.awayTeam}
+                        {m.isFinished ? ` (${m.homeScore}-${m.awayScore})` : ''}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {matchPredsLoading && <div className="py-6"><LoadingSpinner text="Cargando pronósticos..." /></div>}
+
+            {!matchPredsLoading && selectedMatchId && (() => {
+              const match = allMatchesList.find((m) => m.id === selectedMatchId)
+              const predMap = Object.fromEntries(matchPreds.map((p) => [p.userId, p]))
+              return (
+                <div className="overflow-x-auto">
+                  {match?.isFinished && (
+                    <p className="text-xs text-green-400 mb-3 font-semibold">
+                      Resultado final: {match.homeScore} - {match.awayScore}
+                    </p>
+                  )}
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-800 text-gray-500 text-left">
+                        <th className="pb-2 font-semibold">Jugador</th>
+                        <th className="pb-2 font-semibold text-center">Pronóstico</th>
+                        {match?.isFinished && <th className="pb-2 font-semibold text-center">Puntos</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matchPredUsers.map((u) => {
+                        const p = predMap[u.uid]
+                        return (
+                          <tr key={u.uid} className="border-b border-gray-800/50 last:border-0">
+                            <td className="py-2">
+                              <p className="text-white font-medium">{u.displayName || u.username}</p>
+                              <p className="text-gray-500">@{u.username}</p>
+                            </td>
+                            <td className="py-2 text-center">
+                              {p
+                                ? <span className="text-white font-bold">{p.predictedHome} - {p.predictedAway}</span>
+                                : <span className="text-gray-600 italic">Sin pronóstico</span>}
+                            </td>
+                            {match?.isFinished && (
+                              <td className="py-2 text-center">
+                                {p ? (
+                                  <span className={`font-bold px-2 py-0.5 rounded-full text-xs ${
+                                    p.pointsEarned === 3 ? 'bg-green-500/20 text-green-400'
+                                    : p.pointsEarned === 1 ? 'bg-yellow-500/20 text-yellow-400'
+                                    : 'bg-red-500/20 text-red-400'
+                                  }`}>
+                                    {p.pointsEarned === 3 ? '✅ 3pts' : p.pointsEarned === 1 ? '🟡 1pt' : '❌ 0pts'}
+                                  </span>
+                                ) : <span className="text-gray-600">—</span>}
+                              </td>
+                            )}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
+          </>
+        )}
+      </section>
+
+      {/* ── 6. MATCH RESULTS ── */}
       <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
         {stages.map((s) => (
           <button
