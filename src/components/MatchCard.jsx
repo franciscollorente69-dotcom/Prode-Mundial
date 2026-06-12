@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { savePrediction } from '../firebase/firestore'
+import { savePrediction, getPredictionsForMatches, getUsers } from '../firebase/firestore'
 import { isPredictionOpen, formatLocalDate, pointsLabel } from '../utils/scoring'
 import CountdownTimer from './CountdownTimer'
 
@@ -10,6 +10,9 @@ export default function MatchCard({ match, prediction }) {
   const [away, setAway] = useState(prediction?.predictedAway ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [showAllPreds, setShowAllPreds] = useState(false)
+  const [allPreds, setAllPreds] = useState(null)  // null = not loaded yet
+  const [allPredsLoading, setAllPredsLoading] = useState(false)
 
   const matchDate = match.matchDate?.toDate ? match.matchDate.toDate() : new Date(match.matchDate)
   const open = isPredictionOpen(matchDate)
@@ -26,6 +29,30 @@ export default function MatchCard({ match, prediction }) {
       setTimeout(() => setSaved(false), 2000)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleToggleAllPreds = async () => {
+    if (showAllPreds) { setShowAllPreds(false); return }
+    setShowAllPreds(true)
+    if (allPreds !== null) return
+    setAllPredsLoading(true)
+    try {
+      const [preds, users] = await Promise.all([
+        getPredictionsForMatches([match.id]),
+        getUsers(),
+      ])
+      const userMap = Object.fromEntries(users.map((u) => [u.uid, u]))
+      const rows = preds
+        .map((p) => ({
+          ...p,
+          displayName: userMap[p.userId]?.displayName || userMap[p.userId]?.username || '?',
+          username: userMap[p.userId]?.username || '',
+        }))
+        .sort((a, b) => (b.pointsEarned ?? -1) - (a.pointsEarned ?? -1))
+      setAllPreds(rows)
+    } finally {
+      setAllPredsLoading(false)
     }
   }
 
@@ -85,32 +112,81 @@ export default function MatchCard({ match, prediction }) {
       {user && (
         <div className={`px-4 pb-3 border-t border-gray-800 pt-3 ${!open && !isFinished ? 'opacity-50' : ''}`}>
           {isFinished ? (
-            // Show result
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">Tu pronóstico:</span>
-                {hasPrediction ? (
-                  <span className="text-sm font-bold text-white">
-                    {prediction.predictedHome} - {prediction.predictedAway}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-600 italic">Sin pronóstico</span>
-                )}
+            // Show own result + toggle all predictions
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">Tu pronóstico:</span>
+                  {hasPrediction ? (
+                    <span className="text-sm font-bold text-white">
+                      {prediction.predictedHome} - {prediction.predictedAway}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-600 italic">Sin pronóstico</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasPrediction && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      prediction.pointsEarned === 3
+                        ? 'bg-green-500/20 text-green-400'
+                        : prediction.pointsEarned === 1
+                        ? 'bg-yellow-500/20 text-yellow-400'
+                        : prediction.pointsEarned === 0
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-gray-800 text-gray-400'
+                    }`}>
+                      {pointsLabel(prediction.pointsEarned)}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleToggleAllPreds}
+                    className="text-xs text-gray-500 hover:text-green-400 transition-colors underline underline-offset-2"
+                  >
+                    {showAllPreds ? 'Ocultar' : 'Ver todos'}
+                  </button>
+                </div>
               </div>
-              {hasPrediction && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  prediction.pointsEarned === 3
-                    ? 'bg-green-500/20 text-green-400'
-                    : prediction.pointsEarned === 1
-                    ? 'bg-yellow-500/20 text-yellow-400'
-                    : prediction.pointsEarned === 0
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'bg-gray-800 text-gray-400'
-                }`}>
-                  {pointsLabel(prediction.pointsEarned)}
-                </span>
+
+              {showAllPreds && (
+                <div className="mt-3 border-t border-gray-800 pt-3">
+                  {allPredsLoading ? (
+                    <p className="text-xs text-gray-500 text-center py-2">Cargando...</p>
+                  ) : allPreds?.length === 0 ? (
+                    <p className="text-xs text-gray-600 text-center py-2">Nadie pronosticó este partido.</p>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-600 text-left border-b border-gray-800">
+                          <th className="pb-1.5 font-semibold">Jugador</th>
+                          <th className="pb-1.5 font-semibold text-center">Pronóstico</th>
+                          <th className="pb-1.5 font-semibold text-center">Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allPreds.map((p) => (
+                          <tr key={p.id} className="border-b border-gray-800/40 last:border-0">
+                            <td className="py-1.5 text-gray-300">{p.displayName}</td>
+                            <td className="py-1.5 text-center font-bold text-white">
+                              {p.predictedHome} - {p.predictedAway}
+                            </td>
+                            <td className="py-1.5 text-center">
+                              <span className={`font-bold ${
+                                p.pointsEarned === 3 ? 'text-green-400'
+                                : p.pointsEarned === 1 ? 'text-yellow-400'
+                                : 'text-red-400'
+                              }`}>
+                                {p.pointsEarned ?? '—'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           ) : open ? (
             // Prediction input
             <div className="flex items-center gap-2">
