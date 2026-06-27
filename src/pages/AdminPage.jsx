@@ -15,7 +15,7 @@ import {
   getPredictionsByUser,
   getPredictionsForMatches,
 } from '../firebase/firestore'
-import { seedMatches, fixMatchTimes } from '../firebase/seedData'
+import { seedMatches, fixMatchTimes, upsertRound16Matches } from '../firebase/seedData'
 import { STAGE_LABELS, STAGE_ORDER } from '../utils/scoring'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -25,6 +25,7 @@ export default function AdminPage() {
   const [matchesLoading, setMatchesLoading] = useState(true)
   const [activeStage, setActiveStage] = useState('group')
   const [seeding, setSeeding] = useState(false)
+  const [seedingR16, setSeedingR16] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [seedMsg, setSeedMsg] = useState('')
   const [scores, setScores] = useState({})
@@ -185,6 +186,20 @@ export default function AdminPage() {
       setUsersError(`Error al eliminar: ${err.message}`)
     } finally {
       setDeletingUserId(null)
+    }
+  }
+
+  const handleSeedR16 = async () => {
+    if (!window.confirm('¿Cargar/actualizar los 16 partidos de Dieciseisavos de Final? Los que ya existen se actualizarán sin borrar resultados.')) return
+    setSeedingR16(true)
+    setSeedMsg('')
+    try {
+      const { updated, created } = await upsertRound16Matches()
+      setSeedMsg(`✅ Dieciseisavos: ${updated} actualizados, ${created} creados.`)
+    } catch (e) {
+      setSeedMsg(`❌ Error: ${e.message}`)
+    } finally {
+      setSeedingR16(false)
     }
   }
 
@@ -464,24 +479,31 @@ export default function AdminPage() {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleDeleteAll}
-            disabled={seeding || deleting || matches.length === 0}
+            disabled={seeding || deleting || seedingR16 || matches.length === 0}
             className="bg-red-700 hover:bg-red-600 disabled:bg-red-950 disabled:text-red-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
           >
             {deleting ? '⏳ Eliminando...' : '🗑️ Eliminar todos los partidos'}
           </button>
           <button
+            onClick={handleSeedR16}
+            disabled={seeding || deleting || seedingR16}
+            className="bg-purple-700 hover:bg-purple-600 disabled:bg-purple-900 disabled:text-purple-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
+          >
+            {seedingR16 ? '⏳ Procesando...' : '⚔️ Dieciseisavos'}
+          </button>
+          <button
             onClick={handleSeed}
-            disabled={seeding || deleting}
+            disabled={seeding || deleting || seedingR16}
             className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-700 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
           >
             {seeding ? '⏳ Cargando...' : '⬆️ Cargar partidos'}
           </button>
           <button
             onClick={handleFixTimes}
-            disabled={seeding || deleting}
+            disabled={seeding || deleting || seedingR16}
             className="bg-yellow-600 hover:bg-yellow-500 disabled:bg-yellow-900 disabled:text-yellow-800 text-white font-semibold text-sm px-4 py-2 rounded-xl transition-colors"
           >
-            {seeding ? '⏳ Corrigiendo...' : '🕐 +1 hora a todos los partidos'}
+            {seeding ? '⏳ Corrigiendo...' : '🕐 +1 hora a todos'}
           </button>
         </div>
         {seedMsg && (

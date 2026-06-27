@@ -1,4 +1,4 @@
-import { writeBatch, doc, collection, getDocs, updateDoc } from 'firebase/firestore'
+import { writeBatch, doc, collection, getDocs, updateDoc, query, where, orderBy } from 'firebase/firestore'
 import { db } from './config'
 
 // ─── FIFA World Cup 2026 — Official groups (draw: December 5, 2025, Washington D.C.) ──
@@ -222,4 +222,85 @@ export const fixMatchTimes = async () => {
     await batch.commit()
   }
   return updated
+}
+
+// ─── Dieciseisavos de Final — upsert (update si existen, crea si no) ──────────
+// Todos los 16 partidos del round_of_32 ordenados cronológicamente.
+// Los 9 confirmados tienen equipos reales; los otros 7 quedan como "Por definir".
+// Tiempos en UTC (hora Argentina + 3h).
+const ROUND16_DATA = [
+  { matchNumber: 73, homeTeam: 'Sudáfrica',       homeFlag: '🇿🇦', awayTeam: 'Canadá',              awayFlag: '🇨🇦', matchDate: '2026-06-28T19:00:00Z' },
+  { matchNumber: 74, homeTeam: 'Brasil',           homeFlag: '🇧🇷', awayTeam: 'Japón',               awayFlag: '🇯🇵', matchDate: '2026-06-29T17:00:00Z' },
+  { matchNumber: 75, homeTeam: 'Alemania',         homeFlag: '🇩🇪', awayTeam: 'Paraguay',            awayFlag: '🇵🇾', matchDate: '2026-06-29T20:30:00Z' },
+  { matchNumber: 76, homeTeam: 'Países Bajos',     homeFlag: '🇳🇱', awayTeam: 'Marruecos',           awayFlag: '🇲🇦', matchDate: '2026-06-30T01:00:00Z' },
+  { matchNumber: 77, homeTeam: 'Costa de Marfil',  homeFlag: '🇨🇮', awayTeam: 'Noruega',             awayFlag: '🇳🇴', matchDate: '2026-06-30T17:00:00Z' },
+  { matchNumber: 78, homeTeam: 'Francia',          homeFlag: '🇫🇷', awayTeam: 'Suecia',              awayFlag: '🇸🇪', matchDate: '2026-06-30T21:00:00Z' },
+  { matchNumber: 79, homeTeam: 'Estados Unidos',   homeFlag: '🇺🇸', awayTeam: 'Bosnia-Herzegovina',  awayFlag: '🇧🇦', matchDate: '2026-07-02T00:00:00Z' },
+  { matchNumber: 80, homeTeam: 'Australia',        homeFlag: '🇦🇺', awayTeam: 'Egipto',              awayFlag: '🇪🇬', matchDate: '2026-07-03T18:00:00Z' },
+  { matchNumber: 81, homeTeam: 'Argentina',        homeFlag: '🇦🇷', awayTeam: 'Cabo Verde',          awayFlag: '🇨🇻', matchDate: '2026-07-03T22:00:00Z' },
+  // Por confirmar — fecha aproximada, se actualizará cuando se conozcan los cruces
+  { matchNumber: 82, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-04T17:00:00Z' },
+  { matchNumber: 83, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-04T20:00:00Z' },
+  { matchNumber: 84, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-05T17:00:00Z' },
+  { matchNumber: 85, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-05T20:00:00Z' },
+  { matchNumber: 86, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-06T17:00:00Z' },
+  { matchNumber: 87, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-06T20:00:00Z' },
+  { matchNumber: 88, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-07T00:00:00Z' },
+]
+
+export const upsertRound16Matches = async () => {
+  // Leer los documentos existentes de round_of_32
+  const snap = await getDocs(
+    query(collection(db, 'matches'), where('stage', '==', 'round_of_32'), orderBy('matchNumber'))
+  )
+
+  // Mapa: matchNumber → docRef existente
+  const existingByNumber = {}
+  for (const d of snap.docs) {
+    existingByNumber[d.data().matchNumber] = d.ref
+  }
+
+  const batch = writeBatch(db)
+  let updated = 0
+  let created = 0
+
+  for (const m of ROUND16_DATA) {
+    const data = {
+      matchNumber: m.matchNumber,
+      homeTeam: m.homeTeam,
+      homeFlag: m.homeFlag,
+      awayTeam: m.awayTeam,
+      awayFlag: m.awayFlag,
+      matchDate: new Date(m.matchDate),
+      stage: 'round_of_32',
+      group: null,
+      homeScore: null,
+      awayScore: null,
+      isFinished: false,
+    }
+
+    if (existingByNumber[m.matchNumber]) {
+      // Actualizar documento existente — no tocar homeScore/awayScore/isFinished si ya tiene resultado
+      const existingDoc = snap.docs.find((d) => d.data().matchNumber === m.matchNumber)
+      const existing = existingDoc?.data() || {}
+      batch.update(existingByNumber[m.matchNumber], {
+        matchNumber: data.matchNumber,
+        homeTeam: data.homeTeam,
+        homeFlag: data.homeFlag,
+        awayTeam: data.awayTeam,
+        awayFlag: data.awayFlag,
+        matchDate: data.matchDate,
+        // Respetar resultado si ya fue cargado
+        ...(existing.isFinished ? {} : { homeScore: null, awayScore: null, isFinished: false }),
+      })
+      updated++
+    } else {
+      // Crear documento nuevo
+      batch.set(doc(collection(db, 'matches')), data)
+      created++
+    }
+  }
+
+  await batch.commit()
+  return { updated, created, total: ROUND16_DATA.length }
 }
