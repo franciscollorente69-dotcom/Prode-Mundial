@@ -1,4 +1,4 @@
-import { writeBatch, doc, collection, getDocs, updateDoc, query, where, orderBy } from 'firebase/firestore'
+import { writeBatch, doc, collection, getDocs, updateDoc, query, where } from 'firebase/firestore'
 import { db } from './config'
 
 // ─── FIFA World Cup 2026 — Official groups (draw: December 5, 2025, Washington D.C.) ──
@@ -252,7 +252,7 @@ const ROUND16_DATA = [
 export const upsertRound16Matches = async () => {
   // Leer los documentos existentes de round_of_32
   const snap = await getDocs(
-    query(collection(db, 'matches'), where('stage', '==', 'round_of_32'), orderBy('matchNumber'))
+    query(collection(db, 'matches'), where('stage', '==', 'round_of_32'))
   )
 
   // Mapa: matchNumber → docRef existente
