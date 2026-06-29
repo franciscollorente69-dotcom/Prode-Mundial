@@ -228,24 +228,25 @@ export const fixMatchTimes = async () => {
 // Todos los 16 partidos del round_of_32 ordenados cronológicamente.
 // Los 9 confirmados tienen equipos reales; los otros 7 quedan como "Por definir".
 // Tiempos en UTC (hora Argentina + 3h).
+// Horarios en UTC (hora Argentina + 3h). isFinished/homeScore/awayScore solo
+// se aplican si el partido ya se jugó — el upsert respeta resultados existentes.
 const ROUND16_DATA = [
-  { matchNumber: 73, homeTeam: 'Sudáfrica',       homeFlag: '🇿🇦', awayTeam: 'Canadá',              awayFlag: '🇨🇦', matchDate: '2026-06-28T19:00:00Z' },
-  { matchNumber: 74, homeTeam: 'Brasil',           homeFlag: '🇧🇷', awayTeam: 'Japón',               awayFlag: '🇯🇵', matchDate: '2026-06-29T17:00:00Z' },
-  { matchNumber: 75, homeTeam: 'Alemania',         homeFlag: '🇩🇪', awayTeam: 'Paraguay',            awayFlag: '🇵🇾', matchDate: '2026-06-29T20:30:00Z' },
-  { matchNumber: 76, homeTeam: 'Países Bajos',     homeFlag: '🇳🇱', awayTeam: 'Marruecos',           awayFlag: '🇲🇦', matchDate: '2026-06-30T01:00:00Z' },
-  { matchNumber: 77, homeTeam: 'Costa de Marfil',  homeFlag: '🇨🇮', awayTeam: 'Noruega',             awayFlag: '🇳🇴', matchDate: '2026-06-30T17:00:00Z' },
-  { matchNumber: 78, homeTeam: 'Francia',          homeFlag: '🇫🇷', awayTeam: 'Suecia',              awayFlag: '🇸🇪', matchDate: '2026-06-30T21:00:00Z' },
-  { matchNumber: 79, homeTeam: 'Estados Unidos',   homeFlag: '🇺🇸', awayTeam: 'Bosnia-Herzegovina',  awayFlag: '🇧🇦', matchDate: '2026-07-02T00:00:00Z' },
-  { matchNumber: 80, homeTeam: 'Australia',        homeFlag: '🇦🇺', awayTeam: 'Egipto',              awayFlag: '🇪🇬', matchDate: '2026-07-03T18:00:00Z' },
-  { matchNumber: 81, homeTeam: 'Argentina',        homeFlag: '🇦🇷', awayTeam: 'Cabo Verde',          awayFlag: '🇨🇻', matchDate: '2026-07-03T22:00:00Z' },
-  // Por confirmar — fecha aproximada, se actualizará cuando se conozcan los cruces
-  { matchNumber: 82, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-04T17:00:00Z' },
-  { matchNumber: 83, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-04T20:00:00Z' },
-  { matchNumber: 84, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-05T17:00:00Z' },
-  { matchNumber: 85, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-05T20:00:00Z' },
-  { matchNumber: 86, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-06T17:00:00Z' },
-  { matchNumber: 87, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-06T20:00:00Z' },
-  { matchNumber: 88, homeTeam: 'Por definir', homeFlag: '❓', awayTeam: 'Por definir', awayFlag: '❓', matchDate: '2026-07-07T00:00:00Z' },
+  { matchNumber: 73, homeTeam: 'Sudáfrica',        homeFlag: '🇿🇦', awayTeam: 'Canadá',             awayFlag: '🇨🇦', matchDate: '2026-06-28T17:00:00Z', isFinished: true,  homeScore: 0, awayScore: 1 },
+  { matchNumber: 74, homeTeam: 'Brasil',            homeFlag: '🇧🇷', awayTeam: 'Japón',              awayFlag: '🇯🇵', matchDate: '2026-06-29T17:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 75, homeTeam: 'Alemania',          homeFlag: '🇩🇪', awayTeam: 'Paraguay',           awayFlag: '🇵🇾', matchDate: '2026-06-29T20:30:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 76, homeTeam: 'Países Bajos',      homeFlag: '🇳🇱', awayTeam: 'Marruecos',          awayFlag: '🇲🇦', matchDate: '2026-06-30T01:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 77, homeTeam: 'Costa de Marfil',   homeFlag: '🇨🇮', awayTeam: 'Noruega',            awayFlag: '🇳🇴', matchDate: '2026-06-30T17:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 78, homeTeam: 'Francia',           homeFlag: '🇫🇷', awayTeam: 'Suecia',             awayFlag: '🇸🇪', matchDate: '2026-06-30T21:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 79, homeTeam: 'México',            homeFlag: '🇲🇽', awayTeam: 'Ecuador',            awayFlag: '🇪🇨', matchDate: '2026-07-01T01:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 80, homeTeam: 'Inglaterra',        homeFlag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', awayTeam: 'RD Congo',         awayFlag: '🇨🇩', matchDate: '2026-07-01T16:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 81, homeTeam: 'Bélgica',           homeFlag: '🇧🇪', awayTeam: 'Senegal',            awayFlag: '🇸🇳', matchDate: '2026-07-01T20:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 82, homeTeam: 'Estados Unidos',    homeFlag: '🇺🇸', awayTeam: 'Bosnia-Herzegovina', awayFlag: '🇧🇦', matchDate: '2026-07-02T00:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 83, homeTeam: 'España',            homeFlag: '🇪🇸', awayTeam: 'Austria',            awayFlag: '🇦🇹', matchDate: '2026-07-02T19:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 84, homeTeam: 'Portugal',          homeFlag: '🇵🇹', awayTeam: 'Croacia',            awayFlag: '🇭🇷', matchDate: '2026-07-02T23:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 85, homeTeam: 'Suiza',             homeFlag: '🇨🇭', awayTeam: 'Argelia',            awayFlag: '🇩🇿', matchDate: '2026-07-03T03:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 86, homeTeam: 'Australia',         homeFlag: '🇦🇺', awayTeam: 'Egipto',             awayFlag: '🇪🇬', matchDate: '2026-07-03T19:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 87, homeTeam: 'Argentina',         homeFlag: '🇦🇷', awayTeam: 'Cabo Verde',         awayFlag: '🇨🇻', matchDate: '2026-07-03T22:00:00Z', isFinished: false, homeScore: null, awayScore: null },
+  { matchNumber: 88, homeTeam: 'Colombia',          homeFlag: '🇨🇴', awayTeam: 'Ghana',              awayFlag: '🇬🇭', matchDate: '2026-07-04T01:30:00Z', isFinished: false, homeScore: null, awayScore: null },
 ]
 
 export const upsertRound16Matches = async () => {
@@ -280,18 +281,22 @@ export const upsertRound16Matches = async () => {
     }
 
     if (existingByNumber[m.matchNumber]) {
-      // Actualizar documento existente — no tocar homeScore/awayScore/isFinished si ya tiene resultado
       const existingDoc = snap.docs.find((d) => d.data().matchNumber === m.matchNumber)
       const existing = existingDoc?.data() || {}
       batch.update(existingByNumber[m.matchNumber], {
-        matchNumber: data.matchNumber,
         homeTeam: data.homeTeam,
         homeFlag: data.homeFlag,
         awayTeam: data.awayTeam,
         awayFlag: data.awayFlag,
         matchDate: data.matchDate,
-        // Respetar resultado si ya fue cargado
-        ...(existing.isFinished ? {} : { homeScore: null, awayScore: null, isFinished: false }),
+        // Si el seed marca el partido como finalizado, aplicar resultado.
+        // Si ya estaba finalizado en Firestore, respetarlo.
+        // Si ninguno, limpiar.
+        ...(m.isFinished
+          ? { isFinished: true, homeScore: m.homeScore, awayScore: m.awayScore }
+          : existing.isFinished
+          ? {}
+          : { isFinished: false, homeScore: null, awayScore: null }),
       })
       updated++
     } else {
